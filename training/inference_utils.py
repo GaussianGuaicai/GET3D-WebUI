@@ -387,7 +387,7 @@ def generate_model_interpolation(
         save_path = os.path.join(save_dir, 'interpolation')
         os.makedirs(save_path, exist_ok=True)
 
-        print(new_ws_geo.shape)
+        # print(new_ws_geo.shape)
 
         imgs = interpolate_seq(
             n_interpolate,

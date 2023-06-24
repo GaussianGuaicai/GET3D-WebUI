@@ -6,11 +6,8 @@ import tempfile
 import copy
 from torch_utils import training_stats
 from torch_utils import custom_ops
-from training import inference_3d
 from training.inference_utils import generate_a_model,generate_model_interpolation,save_model
 import dnnlib
-import os
-import time
 
 # Load Plugin
 from torch_utils.ops import upfirdn2d
@@ -19,8 +16,6 @@ from torch_utils.ops import filtered_lrelu
 upfirdn2d._init()
 bias_act._init()
 filtered_lrelu._init()
-
-animate_imgs = [np.zeros((1,1,1,3),np.uint8)] # list of image tensors
 
 # Custom Inference Method
 def inference(
@@ -107,9 +102,8 @@ def images_correction(imgs:torch.Tensor):
 def generate_model(geo_seed,tex_seed=10):
     return inference(rank=rank, geo_seed=int(geo_seed), tex_seed=int(tex_seed), **c)[0]
 
-def generate_interpolation(geo_seed_a,tex_seed_a,geo_seed_b,tex_seed_b,interpo_geo,interpo_tex):
-    global animate_imgs
-    animate_imgs = [np.zeros((1,1,1,3),np.uint8)] # Initialize with one balck image
+def generate_interpolation(imgs,geo_seed_a,tex_seed_a,geo_seed_b,tex_seed_b,interpo_geo,interpo_tex):
+    imgs = [np.zeros((1,1,1,3),np.uint8)] # Initialize with a black image
 
     imgs = inference(
         rank=rank,
@@ -120,11 +114,10 @@ def generate_interpolation(geo_seed_a,tex_seed_a,geo_seed_b,tex_seed_b,interpo_g
         **c
         )
 
-    # update global animate images
-    animate_imgs = np.split(imgs,imgs.shape[0])
-    print(f'{len(animate_imgs)} images produced.')
+    # update animate images
+    imgs = np.split(imgs,imgs.shape[0])
     
-    return gr.update(every=None)
+    return imgs,imgs[0][0]
 
 def generate_and_save_model(geo_seed_a,tex_seed_a,geo_seed_b,tex_seed_b,interpo_geo,interpo_tex):
     filepaths = inference(
@@ -137,12 +130,11 @@ def generate_and_save_model(geo_seed_a,tex_seed_a,geo_seed_b,tex_seed_b,interpo_
         )
     return filepaths
 
-def retrive_a_img():
-    global animate_imgs
-    if len(animate_imgs) > 1:
-        print(f'Updating Result of shape: {animate_imgs[0].shape}')
-        return animate_imgs.pop(0)[0]
-    return animate_imgs[0][0]
+def retrive_a_img(imgs:list[np.ndarray]):
+    if len(imgs) > 1:
+        return imgs,imgs.pop(0)[0]
+    return imgs,imgs[0][0]
+
 
 # Load Dictionary
 rank = 0
@@ -155,8 +147,6 @@ print('Launching processes...')
 torch.multiprocessing.set_start_method('spawn', force=True)
 with tempfile.TemporaryDirectory() as temp_dir:
     print(f'Temporary Directory: {temp_dir}')
-    # dnnlib.util.Logger(file_name=os.path.join(c.run_dir, 'log.txt'), file_mode='a', should_flush=True)
-    # print(f'Logger Setup Completed.')
 
     # Init torch_utils.
     sync_device = torch.device('cuda', rank) if c.num_gpus > 1 else None
@@ -166,32 +156,40 @@ with tempfile.TemporaryDirectory() as temp_dir:
 
     # Gradio Web UI
     with gr.Blocks() as demo:
+        result_imgs_var = gr.State([np.zeros((1,1,1,3),np.uint8)]) # list of image tensors
+        # result_save_model_var = gr.State([]) # [ OBJ filepath , Texture filepath ]
         with gr.Column(min_width=100):
             gr.Label('GET3D 3D Textured Shape Interpolation Demo',container=False)
             with gr.Row():
                 with gr.Box():
-                    image_a = gr.Image(generate_model(0,0),label='Model A',height=256,width=2048)
-                    geo_a_seed = gr.Slider(maximum=100,step=1,label='Geometry Variant')
-                    tex_a_seed = gr.Slider(maximum=100,step=1,label='Texture Variant')
+                    geo_a_seed_init = 0
+                    tex_a_seed_init = 0
+                    image_a = gr.Image(generate_model(geo_a_seed_init,tex_a_seed_init),label='Model A',height=256,width=2048)
+                    geo_a_seed = gr.Slider(value=geo_a_seed_init,maximum=100,step=1,label='Geometry Variant')
+                    tex_a_seed = gr.Slider(value=tex_a_seed_init,maximum=100,step=1,label='Texture Variant')
                     geo_a_seed.release(generate_model,[geo_a_seed,tex_a_seed],image_a)
                     tex_a_seed.release(generate_model,[geo_a_seed,tex_a_seed],image_a)
                 with gr.Box():
-                    # img = generate_model(50)
-                    image_b = gr.Image(generate_model(50),label='Model B',height=256,width=2048)
-                    geo_b_seed = gr.Slider(value=50,maximum=100,step=1,label='Geometry Seed')
-                    tex_b_seed = gr.Slider(value=10,maximum=100,step=1,label='Texture Seed',visible=False) # hide texture seed for fun
+                    geo_b_seed_init = 50
+                    tex_b_seed_init = 10
+                    image_b = gr.Image(generate_model(0),label='Model B',height=256,width=2048)
+                    geo_b_seed = gr.Slider(value=geo_b_seed_init,maximum=100,step=1,label='Geometry Seed')
+                    tex_b_seed = gr.Slider(value=tex_b_seed_init,maximum=100,step=1,label='Texture Seed',visible=False) # hide texture seed for fun
                     geo_b_seed.release(generate_model,[geo_b_seed,tex_b_seed],image_b)
                     tex_b_seed.release(generate_model,[geo_b_seed,tex_b_seed],image_b)
 
             with gr.Box():
                 with gr.Column():
-                    image_result = gr.Image(retrive_a_img,label='Interpolation',every=0.2,height=384)
+                    image_result = gr.Image(label='Interpolation',height=384)
                     toggle_interpo_shape = gr.Checkbox(True,label='Interpolate Shape')
                     toggle_interpo_texture = gr.Checkbox(False,label='Interpolate Texture')
                     btn_interpolate = gr.Button('Interpolate')
+                    dep = image_result.change(retrive_a_img,result_imgs_var,[result_imgs_var,image_result],every=0.2)
                     btn_interpolate.click(
                         generate_interpolation,
-                        [geo_a_seed,tex_a_seed,geo_b_seed,tex_b_seed,toggle_interpo_shape,toggle_interpo_texture]
+                        [result_imgs_var,geo_a_seed,tex_a_seed,geo_b_seed,tex_b_seed,toggle_interpo_shape,toggle_interpo_texture],
+                        [result_imgs_var,image_result],
+                        cancels=[dep]
                         )
                     with gr.Row():
                         btn_save_interpo_model = gr.Button('Save Model')
