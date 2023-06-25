@@ -172,7 +172,7 @@ with tempfile.TemporaryDirectory() as temp_dir:
                 with gr.Box():
                     geo_b_seed_init = 50
                     tex_b_seed_init = 10
-                    image_b = gr.Image(generate_model(0),label='Model B',height=256,width=2048)
+                    image_b = gr.Image(generate_model(geo_b_seed_init),label='Model B',height=256,width=2048)
                     geo_b_seed = gr.Slider(value=geo_b_seed_init,maximum=100,step=1,label='Geometry Seed')
                     tex_b_seed = gr.Slider(value=tex_b_seed_init,maximum=100,step=1,label='Texture Seed',visible=False) # hide texture seed for fun
                     geo_b_seed.release(generate_model,[geo_b_seed,tex_b_seed],image_b)
