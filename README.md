@@ -7,6 +7,3 @@
 
 # Credits
 - GET3D - https://github.com/nv-tlabs/GET3D
-
-**GET3D: A Generative Model of High Quality 3D Textured Shapes Learned from Images**<br>
-  ![Teaser image](./docs/assets/get3d_model.png)
