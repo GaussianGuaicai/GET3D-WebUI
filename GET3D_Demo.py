@@ -155,7 +155,7 @@ with tempfile.TemporaryDirectory() as temp_dir:
         custom_ops.verbosity = 'none'
 
     # Gradio Web UI
-    with gr.Blocks() as demo:
+    with gr.Blocks(title='GET3D Interpolation Demo') as demo:
         result_imgs_var = gr.State([np.zeros((1,1,1,3),np.uint8)]) # list of image tensors
         # result_save_model_var = gr.State([]) # [ OBJ filepath , Texture filepath ]
         with gr.Column(min_width=100):
