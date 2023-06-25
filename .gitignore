@@ -2,6 +2,7 @@
 outputs
 pretrained_model/models
 torch_extensions/*
+docs
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
